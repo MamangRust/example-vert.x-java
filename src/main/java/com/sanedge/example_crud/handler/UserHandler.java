@@ -1,66 +1,115 @@
 package com.sanedge.example_crud.handler;
 
-import com.sanedge.example_crud.model.User;
+import com.sanedge.example_crud.domain.requests.user.CreateUserRequest;
+import com.sanedge.example_crud.domain.requests.user.FindAllUsers;
+import com.sanedge.example_crud.domain.requests.user.UpdateUserRequest;
 import com.sanedge.example_crud.service.UserService;
 
+import io.vertx.core.json.Json;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor
 public class UserHandler {
   private final UserService service;
 
-  public UserHandler(UserService service) {
-    this.service = service;
+  public void findAll(RoutingContext ctx) {
+    FindAllUsers req = mapFindAllUsers(ctx);
+
+    service.getAllUsers(req)
+        .onSuccess(resp -> ctx.response().putHeader("Content-Type", "application/json").setStatusCode(200)
+            .end(Json.encode(resp)));
+  }
+
+  public void findActive(RoutingContext ctx) {
+    FindAllUsers req = mapFindAllUsers(ctx);
+
+    service.getActiveUsers(req)
+        .onSuccess(resp -> ctx.response().putHeader("Content-Type", "application/json").setStatusCode(200)
+            .end(Json.encode(resp)));
+  }
+
+  public void findTrashed(RoutingContext ctx) {
+    FindAllUsers req = mapFindAllUsers(ctx);
+
+    service.getTrashedUsers(req)
+        .onSuccess(resp -> ctx.response().putHeader("Content-Type", "application/json").setStatusCode(200)
+            .end(Json.encode(resp)));
+  }
+
+  public void findById(RoutingContext ctx) {
+    Integer userId = Integer.parseInt(ctx.pathParam("id"));
+    service.getUserById(userId)
+        .onSuccess(resp -> {
+          ctx.response().putHeader("Content-Type", "application/json")
+              .end(Json.encode(resp));
+        });
   }
 
   public void create(RoutingContext ctx) {
     JsonObject body = ctx.body().asJsonObject();
-    User user = new User(body.getString("name"), body.getString("email"), null, null);
 
-    service.createUser(user)
+    CreateUserRequest register = CreateUserRequest.builder()
+        .firstName(body.getString("firstname"))
+        .lastName(body.getString("lastname"))
+        .email(body.getString("email"))
+        .password(body.getString("password"))
+        .build();
+
+    service.createUser(register)
         .onSuccess(created -> ctx.response()
             .putHeader("Content-Type", "application/json")
-            .end(created.toJson().encode()))
-        .onFailure(err -> ctx.fail(500, err));
-  }
-
-  public void findAll(RoutingContext ctx) {
-    service.getAllUsers()
-        .onSuccess(users -> {
-          ctx.response().putHeader("Content-Type", "application/json");
-          ctx.response().end(users.stream().map(User::toJson).toList().toString());
-        })
-        .onFailure(err -> ctx.fail(500, err));
-  }
-
-  public void findById(RoutingContext ctx) {
-    int id = Integer.parseInt(ctx.pathParam("id"));
-    service.getUserById(id)
-        .onSuccess(user -> {
-          if (user == null) {
-            ctx.response().setStatusCode(404).end("Not Found");
-            return;
-          }
-          ctx.response().putHeader("Content-Type", "application/json")
-              .end(user.toJson().encode());
-        })
-        .onFailure(err -> ctx.fail(500, err));
+            .setStatusCode(201).end(Json.encode(created)));
   }
 
   public void update(RoutingContext ctx) {
-    int id = Integer.parseInt(ctx.pathParam("id"));
+    Integer userId = Integer.parseInt(ctx.pathParam("id"));
     JsonObject body = ctx.body().asJsonObject();
-    User user = new User(id, body.getString("name"), body.getString("email"), null);
 
-    service.updateUser(id, user)
-        .onSuccess(v -> ctx.response().setStatusCode(204).end())
-        .onFailure(err -> ctx.fail(500, err));
+    UpdateUserRequest updateUserRequest = UpdateUserRequest.builder()
+        .userId(userId)
+        .firstName(body.getString("firstname"))
+        .lastName(body.getString("lastname"))
+        .email(body.getString("email"))
+        .password(body.getString("password"))
+        .build();
+
+    service.updateUser(updateUserRequest)
+        .onSuccess(resp -> ctx.response().setStatusCode(200).end(Json.encode(resp)));
   }
 
-  public void delete(RoutingContext ctx) {
-    int id = Integer.parseInt(ctx.pathParam("id"));
-    service.deleteUser(id)
-        .onSuccess(v -> ctx.response().setStatusCode(204).end())
-        .onFailure(err -> ctx.fail(500, err));
+  public void trashed(RoutingContext ctx) {
+    Integer userId = Integer.parseInt(ctx.pathParam("id"));
+    service.trashed(userId)
+        .onSuccess(resp -> ctx.response().setStatusCode(200).end(Json.encode(resp)));
+  }
+
+  public void restore(RoutingContext ctx) {
+    Integer userId = Integer.parseInt(ctx.pathParam("id"));
+    service.restore(userId)
+        .onSuccess(resp -> ctx.response().setStatusCode(200).end(Json.encode(resp)));
+  }
+
+  public void deletePermanent(RoutingContext ctx) {
+    Integer userId = Integer.parseInt(ctx.pathParam("id"));
+    service.deletePermanent(userId)
+        .onSuccess(v -> ctx.response().setStatusCode(200).end(Json.encode(v)));
+  }
+
+  private FindAllUsers mapFindAllUsers(RoutingContext ctx) {
+    FindAllUsers req = new FindAllUsers();
+
+    req.setSearch(ctx.queryParams().get("search"));
+    req.setPage(
+        ctx.queryParams().contains("page")
+            ? Integer.parseInt(ctx.queryParams().get("page"))
+            : 1);
+    req.setPageSize(
+        ctx.queryParams().contains("pageSize")
+            ? Integer.parseInt(ctx.queryParams().get("pageSize"))
+            : 10);
+
+    return req;
   }
 }
